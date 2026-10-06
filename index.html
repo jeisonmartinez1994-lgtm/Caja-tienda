@@ -503,9 +503,6 @@
             
             if (typeof val === 'number') {
                 if (isNaN(val)) return 0;
-                if (val > 0 && val < 1000 && Number.isInteger(val)) {
-                    return val * 1000;
-                }
                 return val;
             }
             
@@ -524,9 +521,6 @@
                 str = str.replace(/,/g, '');
                 var num = parseFloat(str);
                 if (isNaN(num)) return 0;
-                if (num > 0 && num < 1000 && Number.isInteger(num)) {
-                    return num * 1000;
-                }
                 return num;
             }
             return 0;
@@ -1156,7 +1150,7 @@
                     contenedorCat.innerHTML = '';
                     var nombresBonitos = {
                         'Cerveza': '🍺 Cerveza', 'Huevos': '🥚 Huevos', 'Mustang': '🚬 Mustang',
-                        'Lucky': '🚬 Lucky', 'Impresiones': '🖨️ Impresiones', 'Papelería': '✏️ Papelería', 'Tienda': '🛒 Tienda (Gen)'
+                        'Lucky': '🚬 Lucky', 'Impresiones': '🖨️ Impresiones', 'Papelería': '✏️️ Papelería', 'Tienda': '🛒 Tienda (Gen)'
                     };
 
                     for (var cat in statsPorCat) {
@@ -1278,7 +1272,7 @@
                         '<td class="col-nowrap" style="font-weight: bold; color: #059669;">$' + formatCOP(utilidadReal) + '</td>' +
                         '<td>' + (dia.cuadre || 'N/A') + '</td>' +
                         '<td class="col-nowrap">' +
-                            '<button type="button" class="btn-accion btn-reprogramar" onclick="verDetalleDia(' + index + ')">👁️️ Ver Detalle</button>' +
+                            '<button type="button" class="btn-accion btn-reprogramar" onclick="verDetalleDia(' + index + ')">👁️ Ver Detalle</button>' +
                             '<button type="button" class="btn-accion btn-eliminar" onclick="eliminarDia(\'' + (dia.id || '') + '\', ' + index + ')">🗑</button>' +
                         '</td>' +
                     '</tr>';
