@@ -273,12 +273,12 @@
         
         <div class="config-box">
             <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                <label style="color: #92400e; font-size: 0.9rem;">🪙 Base Inicial de Cambio (Vueltas en Efectivo):</label>
-                <span style="font-size: 0.75rem; color: #b45309;">Dinero físico con el que abres la caja hoy.</span>
+                <label style="color: #92400e; font-size: 0.9rem;">🪙 Base Inicial de Cambio (Vueltas):</label>
+                <input type="number" id="baseInicial" value="60000" step="1000" min="0" onchange="guardarBasesConfiguracion()" style="width: 130px; font-weight: bold;">
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="number" id="baseInicial" value="60000" step="1000" min="0" onchange="guardarBaseInicial()" style="width: 120px; font-weight: bold;">
-                <span style="font-weight: bold; color: #92400e;">COP</span>
+            <div style="display: flex; flex-direction: column; gap: 0.3rem;">
+                <label style="color: #92400e; font-size: 0.9rem;">☕ Base / Fondo Acumulado Ahorro Tinto ($):</label>
+                <input type="number" id="baseTintoAnterior" value="0" step="1000" min="0" placeholder="Ej. 150000" onchange="guardarBasesConfiguracion()" style="width: 150px; font-weight: bold; background: #fff8e1;">
             </div>
         </div>
 
@@ -534,6 +534,7 @@
         var pedidosRegistrados = [];
         var catalogoProductos = {};
         var baseInicialCaja = 60000;
+        var baseTintoAnterior = 0; // Ahorro acumulado anterior
         var prestamosTinto = {}; // Deudas por categoría con Ahorro Tinto
         var miGrafica = null;
         var db = null;
@@ -603,9 +604,13 @@
             }
         }
 
-        function guardarBaseInicial() {
-            var el = document.getElementById('baseInicial');
-            baseInicialCaja = el ? (parseFloat(el.value) || 0) : 60000;
+        function guardarBasesConfiguracion() {
+            var elBase = document.getElementById('baseInicial');
+            baseInicialCaja = elBase ? (parseFloat(elBase.value) || 0) : 60000;
+
+            var elTintoBase = document.getElementById('baseTintoAnterior');
+            baseTintoAnterior = elTintoBase ? (parseFloat(elTintoBase.value) || 0) : 0;
+
             sincronizarEstado();
             recalcularYPintar();
         }
@@ -746,44 +751,50 @@
             var catKey = ped.categoria || 'Tienda';
             var disponibleFondo = 0;
             
-            // Buscar disponible actual
             ventasRegistradas.forEach(function(item) {
                 if (!item.esAhorroTinto && !item.esAhorroSandwich && (item.categoria || 'Tienda') === catKey) {
                     disponibleFondo += (parseFloat(item.costoUnit) || 0) * (parseInt(item.cantidad) || 1);
                 }
             });
 
-            var faltante = ped.costo - disponibleFondo;
+            var faltanteCalculado = Math.max(0, ped.costo - disponibleFondo);
 
-            if (faltante > 0) {
-                var responder = confirm("El pedido de " + ped.nombre + " ($" + formatCOP(ped.costo) + ") supera el fondo de " + catKey + " por $" + formatCOP(faltante) + ".\n\n¿Deseas registrar estos $" + formatCOP(faltante) + " como un PRÉSTAMO tomado del Ahorro Tinto?");
-                if (responder) {
-                    prestamosTinto[catKey] = (prestamosTinto[catKey] || 0) + faltante;
-                }
+            // Permite ingresar libremente el monto tomado del Ahorro Tinto
+            var prestamoIngresado = prompt(
+                "Marcar pedido como recibido: \"" + ped.nombre + "\" ($" + formatCOP(ped.costo) + ")\n" +
+                "Disponible actual en " + catKey + ": $" + formatCOP(disponibleFondo) + "\n" +
+                "Faltante teórico: $" + formatCOP(faltanteCalculado) + "\n\n" +
+                "¿Cuánto dinero VAS A PRESTAR del Ahorro Tinto para este pedido? (Escribe 0 si no prestas nada):",
+                faltanteCalculado
+            );
+
+            if (prestamoIngresado === null) return; // Cancelar operación
+
+            var montoPrestamoNum = parseFloat(prestamoIngresado);
+            if (!isNaN(montoPrestamoNum) && montoPrestamoNum > 0) {
+                prestamosTinto[catKey] = (prestamosTinto[catKey] || 0) + montoPrestamoNum;
             }
 
-            if (confirm("¿Confirmas marcar el pedido \"" + ped.nombre + "\" como Recibido?")) {
-                pedidosRegistrados.splice(index, 1);
-                recalcularYPintar();
-                sincronizarEstado();
-            }
+            pedidosRegistrados.splice(index, 1);
+            recalcularYPintar();
+            sincronizarEstado();
         }
 
         function reembolsarAhorroTinto(catKey, montoMaximoAbonar) {
             var deudaActual = prestamosTinto[catKey] || 0;
             if (deudaActual <= 0) return;
 
-            var montoAbono = Math.min(deudaActual, montoMaximoAbonar);
-            if (montoAbono <= 0) {
-                alert("No hay saldo disponible en el Fondo de Reposición de " + catKey + " para hacer un reembolso en este momento.");
-                return;
-            }
+            var abonoSugerido = Math.min(deudaActual, montoMaximoAbonar);
+            var montoIngresado = prompt("Deuda actual de " + catKey + " a Tinto: $" + formatCOP(deudaActual) + "\nDisponible en Reposición: $" + formatCOP(montoMaximoAbonar) + "\n\nIngresa la cantidad a reembolsar al Ahorro Tinto:", abonoSugerido);
 
-            if (confirm("¿Deseas reembolsar $" + formatCOP(montoAbono) + " desde el Fondo de Reposición (" + catKey + ") de vuelta a la bolsa de Ahorro Tinto?")) {
-                prestamosTinto[catKey] = deudaActual - montoAbono;
+            if (montoIngresado === null) return;
+
+            var montoAbono = parseFloat(montoIngresado);
+            if (!isNaN(montoAbono) && montoAbono > 0) {
+                prestamosTinto[catKey] = Math.max(0, deudaActual - montoAbono);
                 recalcularYPintar();
                 sincronizarEstado();
-                alert("✅ Reembolso registrado con éxito. Recuerda mover $" + formatCOP(montoAbono) + " físicamente a la bolsa de Ahorro Tinto.");
+                alert("✅ Reembolso registrado. Recuerda mover $" + formatCOP(montoAbono) + " físicamente a la bolsa de Ahorro Tinto.");
             }
         }
 
@@ -1144,7 +1155,8 @@
                 totalPrestadoTinto += (parseFloat(prestamosTinto[k]) || 0);
             }
 
-            var tintoDisponibleNeto = Math.max(0, totalTinto - totalPrestadoTinto);
+            var totalTintoAcumulado = baseTintoAnterior + totalTinto;
+            var tintoDisponibleNeto = Math.max(0, totalTintoAcumulado - totalPrestadoTinto);
 
             var contPrestamos = document.getElementById('contenedorPrestamosInternos');
             if (contPrestamos) {
@@ -1164,7 +1176,7 @@
                                 '<div class="cat-detalles">' +
                                     '<div>Deuda pendiente: <b style="color:#dc2626;">$' + formatCOP(montoDeuda) + '</b></div>' +
                                     '<div>Disponible en Reposición: <b>$' + formatCOP(dispFondoCat) + '</b></div>' +
-                                    '<button type="button" class="btn-accion btn-recibido" style="margin-top:0.5rem;" onclick="reembolsarAhorroTinto(\'' + catDeuda + '\', ' + dispFondoCat + ')">🔄 Reembolsar $' + formatCOP(abonoPosible) + ' a Tinto</button>' +
+                                    '<button type="button" class="btn-accion btn-recibido" style="margin-top:0.5rem;" onclick="reembolsarAhorroTinto(\'' + catDeuda + '\', ' + dispFondoCat + ')">🔄 Reembolsar a Tinto</button>' +
                                 '</div>' +
                             '</div>';
                     }
@@ -1191,7 +1203,6 @@
                 for (var fRec in pedidosPorFecha) {
                     var grupo = pedidosPorFecha[fRec];
                     
-                    // Calcular acumulado de costo por categoría en esta fecha
                     var requeridosPorCat = {};
                     grupo.items.forEach(function(p) {
                         var c = p.categoria || 'Tienda';
@@ -1260,12 +1271,12 @@
             if(document.getElementById('valTransferencia')) document.getElementById('valTransferencia').innerText = formatCOP(totalTransferencia);
             
             if(document.getElementById('valReposicion')) document.getElementById('valReposicion').innerText = formatCOP(totalReposicion);
-            if(document.getElementById('valTinto')) document.getElementById('valTinto').innerText = formatCOP(totalTinto) + " (Disp: $" + formatCOP(tintoDisponibleNeto) + ")";
+            if(document.getElementById('valTinto')) document.getElementById('valTinto').innerText = formatCOP(totalTintoAcumulado) + " (Disp: $" + formatCOP(tintoDisponibleNeto) + ")";
             
             var subT = document.getElementById('subtextTintoPrestamos');
             if (subT) {
                 if (totalPrestadoTinto > 0) {
-                    subT.innerText = "Tot. $" + formatCOP(totalTinto) + " - $" + formatCOP(totalPrestadoTinto) + " prestados a inventario";
+                    subT.innerText = "Tot. $" + formatCOP(totalTintoAcumulado) + " - $" + formatCOP(totalPrestadoTinto) + " prestados a inventario";
                 } else {
                     subT.innerText = "Acumulado disponible al 100%";
                 }
@@ -1335,6 +1346,7 @@
                 pedidosRegistrados: pedidosRegistrados,
                 catalogoProductos: catalogoProductos,
                 baseInicialCaja: baseInicialCaja,
+                baseTintoAnterior: baseTintoAnterior,
                 prestamosTinto: prestamosTinto
             };
             localStorage.setItem('cajaDiariaEstado', JSON.stringify(estado));
@@ -1350,9 +1362,13 @@
                     catalogoProductos = obj.catalogoProductos || {};
                     prestamosTinto = obj.prestamosTinto || {};
                     baseInicialCaja = (obj.baseInicialCaja !== undefined) ? obj.baseInicialCaja : 60000;
+                    baseTintoAnterior = (obj.baseTintoAnterior !== undefined) ? obj.baseTintoAnterior : 0;
                     
                     var baseEl = document.getElementById('baseInicial');
                     if (baseEl) baseEl.value = baseInicialCaja;
+
+                    var baseTintoEl = document.getElementById('baseTintoAnterior');
+                    if (baseTintoEl) baseTintoEl.value = baseTintoAnterior;
                 } catch(e) { console.error("Error al cargar estado local", e); }
             }
             actualizarDatalist();
