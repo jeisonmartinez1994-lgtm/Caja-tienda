@@ -269,7 +269,7 @@
 </head>
 <body>
     <div class="container">
-        <h2>Calculadora y Gestor de Caja Diaria <span id="cloudBadge" class="cloud-badge">💾 Local Activo</span></h2>
+        <h2>Calculadora y Gestor de Caja Diaria <span id="cloudBadge" class="cloud-badge">💾 Conectando Nube...</span></h2>
         
         <div class="config-box">
             <div style="display: flex; flex-direction: column; gap: 0.3rem;">
@@ -455,7 +455,6 @@
             <button type="button" onclick="agregarPedido()" style="background: #7c3aed;">Registrar Pedido</button>
         </div>
 
-        <!-- Totales consolidados por fecha de recepción -->
         <div id="resumenTotalesPorFecha"></div>
 
         <div class="table-responsive">
@@ -538,6 +537,7 @@
         var prestamosTinto = {};
         var miGrafica = null;
         var db = null;
+        var ignoraProximoSyncNube = false;
 
         function parsearMontoCOP(val) {
             if (val === null || val === undefined || val === '') return 0;
@@ -841,7 +841,8 @@
                 if (item.metodoPago === 'efectivo') {
                     totalEfectivoVentas += ingreso;
                 } else if (item.metodoPago === 'mixto') {
-                    totalEfectivoVentas += parseFloat(item.montoEfectivoMixto) || 0;
+                    var efcMix = Math.min(ingreso, Math.max(0, parseFloat(item.montoEfectivoMixto) || 0));
+                    totalEfectivoVentas += efcMix;
                 }
             });
 
@@ -888,8 +889,8 @@
                 ventasRegistradas = [];
                 
                 reconstruirCatalogoDesdeHistorial();
-                recalcularYPintar();
                 sincronizarEstado();
+                recalcularYPintar();
                 renderizarHistorial();
                 actualizarGrafica();
             }
@@ -1044,7 +1045,7 @@
                     itemEfcCosto = costoTot;
                     totalEfectivoIngresado += ingreso;
                 } else if (item.metodoPago === 'mixto') {
-                    var efcMix = parseFloat(item.montoEfectivoMixto) || 0;
+                    var efcMix = Math.min(ingreso, Math.max(0, parseFloat(item.montoEfectivoMixto) || 0));
                     var trfMix = Math.max(0, ingreso - efcMix);
                     itemEfcVenta = efcMix;
                     itemTrfVenta = trfMix;
@@ -1130,7 +1131,6 @@
                 }
             });
 
-            // VISTA DETALLADA POR CATEGORÍA RESTAURADA
             var contenedorCat = document.getElementById('resumenCategorias');
             if (contenedorCat) {
                 contenedorCat.innerHTML = '';
@@ -1160,7 +1160,6 @@
                 }
             }
 
-            // Calcular préstamos internos acumulados
             var totalPrestadoTinto = 0;
             for (var k in prestamosTinto) {
                 totalPrestadoTinto += (parseFloat(prestamosTinto[k]) || 0);
@@ -1197,7 +1196,6 @@
                 }
             }
 
-            // Agrupar pedidos por fecha de recepción y calcular faltante
             var pedidosPorFecha = {};
             pedidosRegistrados.forEach(function(ped) {
                 var fechaKey = ped.fechaRecepcion || 'Sin fecha';
@@ -1294,11 +1292,12 @@
 
             if(document.getElementById('valSandwich')) document.getElementById('valSandwich').innerText = formatCOP(totalSandwich);
 
-            // DESCONTAR 40K DEL EFECTIVO PRIORITARIAMENTE
             var META_DIARIA = 40000;
-            var cubiertoEfectivo = Math.min(gananciaEfectivo, META_DIARIA);
+            var ganEfcPos = Math.max(0, gananciaEfectivo);
+            var cubiertoEfectivo = Math.min(ganEfcPos, META_DIARIA);
             var deficitRestante = Math.max(0, META_DIARIA - cubiertoEfectivo);
-            var cubiertoTransferencia = Math.min(gananciaTransferencia, deficitRestante);
+            var ganTrfPos = Math.max(0, gananciaTransferencia);
+            var cubiertoTransferencia = Math.min(ganTrfPos, deficitRestante);
             var totalCubiertoLocal = cubiertoEfectivo + cubiertoTransferencia;
 
             var gananciaEfectivoLibre = Math.max(0, gananciaEfectivo - cubiertoEfectivo);
@@ -1357,9 +1356,18 @@
                 catalogoProductos: catalogoProductos,
                 baseInicialCaja: baseInicialCaja,
                 baseTintoAnterior: baseTintoAnterior,
-                prestamosTinto: prestamosTinto
+                prestamosTinto: prestamosTinto,
+                timestampSync: new Date().toISOString()
             };
+            
             localStorage.setItem('cajaDiariaEstado', JSON.stringify(estado));
+
+            if (db) {
+                ignoraProximoSyncNube = true;
+                db.collection('estado_actual').doc('caja_hoy').set(estado).catch(function(err) {
+                    console.warn("Error al guardar estado activo en Firestore:", err);
+                });
+            }
         }
 
         function cargarEstado() {
@@ -1393,7 +1401,6 @@
             hace7Dias.setDate(hace7Dias.getDate() - 7);
             hace7Dias.setHours(0, 0, 0, 0);
 
-            // 1. Sumar ventas de la caja actual
             ventasRegistradas.forEach(function(item) {
                 if (item.esAhorroTinto || item.esAhorroSandwich) return;
                 var catKey = item.categoria || 'Tienda';
@@ -1402,7 +1409,6 @@
                 conteoTotal[keyProd] = (conteoTotal[keyProd] || 0) + cant;
             });
 
-            // 2. Sumar ventas del historial (últimos 7 días)
             if (historialDias && historialDias.length > 0) {
                 historialDias.forEach(function(dia) {
                     var fechaDia = null;
@@ -1583,13 +1589,17 @@
             cargarEstado();
             
             if (typeof firebase !== 'undefined') {
+                // =========================================================================
+                // 🔑 CLAVES REALES DE TU PROYECTO FIREBASE "caja-tienda"
+                // =========================================================================
                 var firebaseConfig = {
-                    apiKey: "AIzaSyFakeKey_MOCK",
-                    authDomain: "caja-diaria.firebaseapp.com",
-                    projectId: "caja-diaria",
-                    storageBucket: "caja-diaria.appspot.com",
-                    messagingSenderId: "123456789",
-                    appId: "1:123456789:web:mockid"
+                    apiKey: "AIzaSyBgP5rBvykohBtmaGOKEVl7i-n0eCDdHlc",
+                    authDomain: "caja-tienda.firebaseapp.com",
+                    projectId: "caja-tienda",
+                    storageBucket: "caja-tienda.firebasestorage.app",
+                    messagingSenderId: "426400070575",
+                    appId: "1:426400070575:web:6234f9deb28f2a806e4d5a",
+                    measurementId: "G-ZJGLSZ7CTT"
                 };
 
                 try {
@@ -1605,6 +1615,36 @@
                         badge.style.color = '#1e40af';
                     }
 
+                    // 1. ESCUCHAR VENTAS/ESTADO DE HOY EN VIVO (SINCRONIZACIÓN PC <-> CELULAR)
+                    db.collection('estado_actual').doc('caja_hoy').onSnapshot(function(doc) {
+                        if (ignoraProximoSyncNube) {
+                            ignoraProximoSyncNube = false;
+                            return;
+                        }
+                        if (doc.exists) {
+                            var obj = doc.data();
+                            ventasRegistradas = obj.ventasRegistradas || [];
+                            pedidosRegistrados = obj.pedidosRegistrados || [];
+                            catalogoProductos = obj.catalogoProductos || {};
+                            prestamosTinto = obj.prestamosTinto || {};
+                            baseInicialCaja = (obj.baseInicialCaja !== undefined) ? obj.baseInicialCaja : 60000;
+                            baseTintoAnterior = (obj.baseTintoAnterior !== undefined) ? obj.baseTintoAnterior : 0;
+                            
+                            var baseEl = document.getElementById('baseInicial');
+                            if (baseEl) baseEl.value = baseInicialCaja;
+
+                            var baseTintoEl = document.getElementById('baseTintoAnterior');
+                            if (baseTintoEl) baseTintoEl.value = baseTintoAnterior;
+
+                            localStorage.setItem('cajaDiariaEstado', JSON.stringify(obj));
+                            actualizarDatalist();
+                            recalcularYPintar();
+                        }
+                    }, function(err) {
+                        console.error("Error al escuchar estado en tiempo real:", err);
+                    });
+
+                    // 2. ESCUCHAR HISTORIAL DE DÍAS CERRADOS
                     db.collection('historial').orderBy('timestamp', 'desc').onSnapshot(function(snapshot) {
                         historialDias = [];
                         snapshot.forEach(function(doc) {
@@ -1617,11 +1657,11 @@
                         renderizarHistorial();
                         actualizarGrafica();
                     }, function(err) {
-                        console.error("Error al escuchar Firestore:", err);
+                        console.error("Error al escuchar historial de Firestore:", err);
                     });
 
                 } catch (e) {
-                    console.error("Firebase falló. Usando modo local puro.", e);
+                    console.error("Firebase falló. Operando en modo local.", e);
                 }
             } else {
                 renderizarHistorial();
