@@ -1299,6 +1299,7 @@
 
             if(document.getElementById('valSandwich')) document.getElementById('valSandwich').innerText = formatCOP(totalSandwich);
 
+            // CÁLCULOS LIMPIOS Y SEPARADOS
             var META_DIARIA = 40000;
             var ganEfcPos = Math.max(0, gananciaEfectivo);
             var cubiertoEfectivo = Math.min(ganEfcPos, META_DIARIA);
@@ -1308,6 +1309,8 @@
             var totalCubiertoLocal = cubiertoEfectivo + cubiertoTransferencia;
 
             var gananciaEfectivoLibre = Math.max(0, gananciaEfectivo - cubiertoEfectivo);
+            
+            // SI EL LOCAL SE ESTÁ PAGANDO CON EFECTIVO, NO SE MUESTRA NINGÚN DESCUENTO FICTICIO EN EL BANCO
             var gananciaTransferenciaLibre = Math.max(0, gananciaTransferencia - cubiertoTransferencia);
             var totalGananciaReal = gananciaEfectivoLibre + gananciaTransferenciaLibre;
 
@@ -1331,7 +1334,7 @@
                 if(cajaUtilidadesBox) cajaUtilidadesBox.style.background = "#fff1f2";
                 if(metaText) { 
                     var falta = META_DIARIA - totalCubiertoLocal;
-                    metaText.innerText = "Faltan $" + formatCOP(falta) + " para el local ($" + formatCOP(cubiertoEfectivo) + " tomados de Efc)"; 
+                    metaText.innerText = "Faltan $" + formatCOP(falta) + " para el local ($" + formatCOP(cubiertoEfectivo) + " aportados por Efc)"; 
                     metaText.style.color = "#9f1239"; 
                     metaText.style.fontWeight = "normal"; 
                 }
@@ -1342,16 +1345,16 @@
             if(document.getElementById('valGananciaEfectivo')) document.getElementById('valGananciaEfectivo').innerText = formatCOP(gananciaEfectivoLibre);
             var subEfc = document.getElementById('subtextGananciaEfectivo');
             if (subEfc) {
-                subEfc.innerText = "Efectivo libre en cajón (Tot. $" + formatCOP(gananciaEfectivo) + " - $" + formatCOP(cubiertoEfectivo) + " local)";
+                subEfc.innerText = "Efectivo libre en cajón (Tot. $" + formatCOP(gananciaEfectivo) + " - $" + formatCOP(cubiertoEfectivo) + " aportados al local)";
             }
 
             if(document.getElementById('valGananciaTransferencia')) document.getElementById('valGananciaTransferencia').innerText = formatCOP(gananciaTransferenciaLibre);
             var subTrf = document.getElementById('subtextGananciaTransferencia');
             if (subTrf) {
                 if (cubiertoTransferencia > 0) {
-                    subTrf.innerText = "Libre en banco (Tot. $" + formatCOP(gananciaTransferencia) + " - $" + formatCOP(cubiertoTransferencia) + " local)";
+                    subTrf.innerText = "Libre en banco (Tot. $" + formatCOP(gananciaTransferencia) + " - $" + formatCOP(cubiertoTransferencia) + " aportados al local)";
                 } else {
-                    subTrf.innerText = "Bolsillo digital libre (Sin descuento de local)";
+                    subTrf.innerText = "Ganancia limpia acumulada en Banco (Tot. $" + formatCOP(gananciaTransferencia) + ")";
                 }
             }
         }
