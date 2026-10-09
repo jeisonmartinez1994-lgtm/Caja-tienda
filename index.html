@@ -534,8 +534,8 @@
         var pedidosRegistrados = [];
         var catalogoProductos = {};
         var baseInicialCaja = 60000;
-        var baseTintoAnterior = 0; // Ahorro acumulado anterior
-        var prestamosTinto = {}; // Deudas por categoría con Ahorro Tinto
+        var baseTintoAnterior = 0;
+        var prestamosTinto = {};
         var miGrafica = null;
         var db = null;
 
@@ -759,7 +759,6 @@
 
             var faltanteCalculado = Math.max(0, ped.costo - disponibleFondo);
 
-            // Permite ingresar libremente el monto tomado del Ahorro Tinto
             var prestamoIngresado = prompt(
                 "Marcar pedido como recibido: \"" + ped.nombre + "\" ($" + formatCOP(ped.costo) + ")\n" +
                 "Disponible actual en " + catKey + ": $" + formatCOP(disponibleFondo) + "\n" +
@@ -768,7 +767,7 @@
                 faltanteCalculado
             );
 
-            if (prestamoIngresado === null) return; // Cancelar operación
+            if (prestamoIngresado === null) return;
 
             var montoPrestamoNum = parseFloat(prestamoIngresado);
             if (!isNaN(montoPrestamoNum) && montoPrestamoNum > 0) {
@@ -1009,14 +1008,14 @@
             var totalTransferencia = 0, totalEfectivoIngresado = 0;
             var gananciaEfectivo = 0, gananciaTransferencia = 0;
             
-            var desgloseGatosCategorias = {
-                'Tienda': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Cerveza': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Huevos': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Mustang': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Lucky': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Impresiones': { reposicion: 0, ganancia: 0, ventas: 0 },
-                'Papelería': { reposicion: 0, ganancia: 0, ventas: 0 }
+            var statsPorCat = {
+                'Tienda': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Cerveza': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Huevos': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Mustang': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Lucky': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Impresiones': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
+                'Papelería': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 }
             };
 
             var tbody = document.getElementById('listaVentas');
@@ -1084,12 +1083,16 @@
                     destinoTexto = "Rep: $" + formatCOP(costoTot) + " | <span class=\"" + claseGanancia + "\">Gan: $" + formatCOP(ganancia) + "</span>";
                     
                     var catKey = item.categoria || 'Tienda';
-                    if (!desgloseGatosCategorias[catKey]) {
-                        desgloseGatosCategorias[catKey] = { reposicion: 0, ganancia: 0, ventas: 0 };
+                    if (!statsPorCat[catKey]) {
+                        statsPorCat[catKey] = { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 };
                     }
-                    desgloseGatosCategorias[catKey].reposicion += costoTot;
-                    desgloseGatosCategorias[catKey].ganancia += ganancia;
-                    desgloseGatosCategorias[catKey].ventas += ingreso;
+                    statsPorCat[catKey].costo += costoTot;
+                    statsPorCat[catKey].venta += ingreso;
+                    statsPorCat[catKey].ganancia += ganancia;
+                    statsPorCat[catKey].costoEfectivo += itemEfcCosto;
+                    statsPorCat[catKey].costoTransferencia += itemTrfCosto;
+                    statsPorCat[catKey].ventaEfectivo += itemEfcVenta;
+                    statsPorCat[catKey].ventaTransferencia += itemTrfVenta;
                 }
 
                 if (tbody) {
@@ -1127,25 +1130,33 @@
                 }
             });
 
+            // VISTA DETALLADA POR CATEGORÍA RESTAURADA
             var contenedorCat = document.getElementById('resumenCategorias');
             if (contenedorCat) {
                 contenedorCat.innerHTML = '';
-                for (var cat in desgloseGatosCategorias) {
-                    var d = desgloseGatosCategorias[cat];
-                    if (d.ventas > 0) {
-                        var porc = (d.ganancia / d.ventas * 100).toFixed(1);
-                        contenedorCat.innerHTML += 
-                            '<div class="fondo-box cat-card">' +
-                                '<div class="cat-nombre">' + cat + '</div>' +
-                                '<div class="cat-detalles">' +
-                                    '<div>Fondo Reposición: <b>$' + formatCOP(d.reposicion) + '</b></div>' +
-                                    '<div>Utilidad Generada: <b>$' + formatCOP(d.ganancia) + '</b></div>' +
-                                    '<div style="margin-top:0.3rem; border-top: 1px dashed #d8b4fe; padding-top:0.2rem; font-size:0.75rem;">' +
-                                        'Margen de la categoría: <b>' + porc + '%</b>' +
-                                    '</div>' +
+                var nombresBonitos = {
+                    'Cerveza': '🍺 Cerveza', 'Huevos': '🥚 Huevos', 'Mustang': '🚬 Mustang',
+                    'Lucky': '🚬 Lucky', 'Impresiones': '🖨️ Impresiones', 'Papelería': '✏️ Papelería', 'Tienda': '🛒 Tienda (Gen)'
+                };
+
+                for (var cat in statsPorCat) {
+                    var data = statsPorCat[cat];
+                    contenedorCat.innerHTML += 
+                        '<div class="fondo-box cat-card">' +
+                            '<div class="cat-nombre">' + (nombresBonitos[cat] || cat) + '</div>' +
+                            '<div class="cat-detalles">' +
+                                '<div>Venta Total: <b>$' + formatCOP(data.venta) + '</b></div>' +
+                                '<div style="font-size: 0.78rem; color: #4b5563; margin-left: 0.2rem;">' +
+                                    '💵 Efc: $' + formatCOP(data.ventaEfectivo) + ' | 📱 Trf: $' + formatCOP(data.ventaTransferencia) +
                                 '</div>' +
-                            '</div>';
-                    }
+                                '<div style="color: #b91c1c; margin-top: 0.4rem;">Costo (A separar): <b>$' + formatCOP(data.costo) + '</b></div>' +
+                                '<div class="desglose-costo-box">' +
+                                    '<div style="color: #0369a1;">💵 En Efectivo: <b>$' + formatCOP(data.costoEfectivo) + '</b></div>' +
+                                    '<div style="color: #6b21a8;">📱 En Transferencia: <b>$' + formatCOP(data.costoTransferencia) + '</b></div>' +
+                                '</div>' +
+                                '<div style="color: #047857; margin-top: 0.4rem;">Ganancia: <b>$' + formatCOP(data.ganancia) + '</b></div>' +
+                            '</div>' +
+                        '</div>';
                 }
             }
 
@@ -1167,8 +1178,7 @@
                     var montoDeuda = prestamosTinto[catDeuda] || 0;
                     if (montoDeuda > 0) {
                         hayDeudas = true;
-                        var dispFondoCat = desgloseGatosCategorias[catDeuda] ? desgloseGatosCategorias[catDeuda].reposicion : 0;
-                        var abonoPosible = Math.min(montoDeuda, dispFondoCat);
+                        var dispFondoCat = statsPorCat[catDeuda] ? statsPorCat[catDeuda].costo : 0;
 
                         contPrestamos.innerHTML += 
                             '<div class="fondo-box cat-card" style="background:#fffbeb; border-color:#fde68a;">' +
@@ -1214,7 +1224,7 @@
 
                     for (var cNombre in requeridosPorCat) {
                         var reqCost = requeridosPorCat[cNombre];
-                        var dispFondo = desgloseGatosCategorias[cNombre] ? desgloseGatosCategorias[cNombre].reposicion : 0;
+                        var dispFondo = statsPorCat[cNombre] ? statsPorCat[cNombre].costo : 0;
                         var dif = reqCost - dispFondo;
                         
                         if (dif > 0) faltanteFechaTotal += dif;
@@ -1241,7 +1251,7 @@
                 tbodyPedidos.innerHTML = '';
                 pedidosRegistrados.forEach(function(ped, index) {
                     var catKey = ped.categoria || 'Tienda';
-                    var fondoDisp = desgloseGatosCategorias[catKey] ? desgloseGatosCategorias[catKey].reposicion : 0;
+                    var fondoDisp = statsPorCat[catKey] ? statsPorCat[catKey].costo : 0;
                     var alcanzado = fondoDisp >= ped.costo;
                     var statusBadge = alcanzado ? "<span class=\"badge-suficiente\">✔️ Capital Listo</span>" : "<span class=\"badge-insuficiente\">❌ Faltan $" + formatCOP(ped.costo - fondoDisp) + "</span>";
 
