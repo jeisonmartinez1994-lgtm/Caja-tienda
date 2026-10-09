@@ -1035,33 +1035,40 @@
 
                 var itemEfcVenta = 0, itemTrfVenta = 0;
                 var itemEfcCosto = 0, itemTrfCosto = 0;
+                var ganEfcItem = 0, ganTrfItem = 0;
 
+                // CÁLCULO DIRECTO POR MÉTODO DE PAGO
                 if (item.metodoPago === 'transferencia') {
                     itemTrfVenta = ingreso;
                     itemTrfCosto = costoTot;
+                    ganTrfItem = ganancia;
                     totalTransferencia += ingreso;
                 } else if (item.metodoPago === 'efectivo') {
                     itemEfcVenta = ingreso;
                     itemEfcCosto = costoTot;
+                    ganEfcItem = ganancia;
                     totalEfectivoIngresado += ingreso;
                 } else if (item.metodoPago === 'mixto') {
                     var efcMix = Math.min(ingreso, Math.max(0, parseFloat(item.montoEfectivoMixto) || 0));
                     var trfMix = Math.max(0, ingreso - efcMix);
                     itemEfcVenta = efcMix;
                     itemTrfVenta = trfMix;
+                    
                     var propEfc = (ingreso > 0) ? (efcMix / ingreso) : 0;
                     itemEfcCosto = costoTot * propEfc;
                     itemTrfCosto = costoTot * (1 - propEfc);
+                    
+                    ganEfcItem = itemEfcVenta - itemEfcCosto;
+                    ganTrfItem = itemTrfVenta - itemTrfCosto;
+                    
                     totalEfectivoIngresado += efcMix;
                     totalTransferencia += trfMix;
                 } else {
                     itemEfcVenta = ingreso;
                     itemEfcCosto = costoTot;
+                    ganEfcItem = ganancia;
                     totalEfectivoIngresado += ingreso;
                 }
-
-                var ganEfcItem = itemEfcVenta - itemEfcCosto;
-                var ganTrfItem = itemTrfVenta - itemTrfCosto;
 
                 var claseGanancia = ganancia >= 0 ? "ganancia-positiva" : "ganancia-negativa";
                 var destinoTexto = "";
