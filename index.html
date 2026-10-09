@@ -217,6 +217,24 @@
             gap: 1rem;
         }
 
+        .resumen-fecha-card {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .resumen-fecha-header {
+            font-weight: bold;
+            font-size: 1rem;
+            color: #1e293b;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.4rem;
+            margin-bottom: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
         .chart-container {
             position: relative;
             margin-top: 1.5rem;
@@ -369,14 +387,14 @@
                 <span id="metaSostenimientoText" style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal;">Faltan $40,000 para gastos del local</span>
             </div>
             <div class="fondo-box fondo-ganancia-efectivo">
-                <span>💵 Ganancia en Efectivo</span> 
+                <span>💵 Ganancia en Efectivo Libre</span> 
                 $<b id="valGananciaEfectivo">0</b>
-                <span style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #1e40af;">Utilidad física a dejar en cajón</span>
+                <span id="subtextGananciaEfectivo" style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #1e40af;">Utilidad física libre en cajón</span>
             </div>
             <div class="fondo-box fondo-ganancia-digital">
-                <span>📱 Ganancia Digital (Nequi/Davi)</span> 
+                <span>📱 Ganancia Digital Libre (Nequi/Davi)</span> 
                 $<b id="valGananciaTransferencia">0</b>
-                <span style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #6b21a8;">Mover a Bolsillo Digital</span>
+                <span id="subtextGananciaTransferencia" style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #6b21a8;">Mover a Bolsillo Digital</span>
             </div>
             <div class="fondo-box fondo-neto-real">
                 <span>3. Utilidad Libre / Ganancia Neta Real</span> 
@@ -384,8 +402,9 @@
                 <span style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #166534;">Excedente libre después del local</span>
             </div>
             <div class="fondo-box fondo-tinto">
-                <span>4. Ahorro Tinto</span> 
+                <span>4. Ahorro Tinto (Total / Disponible)</span> 
                 $<b id="valTinto">0</b>
+                <span id="subtextTintoPrestamos" style="font-size: 0.7rem; margin-top: 0.3rem; font-weight: normal; color: #92400e;">Acumulado total de tintos</span>
             </div>
             <div class="fondo-box fondo-sandwich">
                 <span>5. Ahorro Sandwiches</span> 
@@ -395,6 +414,9 @@
 
         <div class="seccion-titulo">📦 Control Detallado por Categoría</div>
         <div class="summary" id="resumenCategorias"></div>
+
+        <div class="seccion-titulo">🤝 Préstamos Internos y Reembolsos (Ahorro Tinto)</div>
+        <div class="summary" id="contenedorPrestamosInternos"></div>
 
         <div class="seccion-titulo">🚚 Pedidos por Recibir / Proveedores</div>
         <p style="font-size: 0.85rem; color: #4b5563; margin-top: 0.4rem;">Registra cuándo harás el pedido, cuándo lo recibirás y verifica si el fondo cuenta con el capital.</p>
@@ -433,6 +455,9 @@
             <button type="button" onclick="agregarPedido()" style="background: #7c3aed;">Registrar Pedido</button>
         </div>
 
+        <!-- Totales consolidados por fecha de recepción -->
+        <div id="resumenTotalesPorFecha"></div>
+
         <div class="table-responsive">
             <table>
                 <thead>
@@ -451,7 +476,7 @@
             </table>
         </div>
 
-        <div class="seccion-titulo">🏆 Productos Más Vendidos (Cantidades)</div>
+        <div class="seccion-titulo">🏆 Productos Más Vendidos (Últimos 7 días)</div>
         <div class="summary" id="productosMasVendidos"></div>
 
         <button type="button" onclick="cerrarYGuardarDia()" class="btn-success">💾 Cerrar Día y Guardar en el Histórico</button>
@@ -477,6 +502,20 @@
             </table>
         </div>
 
+        <div class="seccion-titulo" style="margin-top: 3rem;">📅 Balance Mensual</div>
+        <div class="table-responsive" style="margin-bottom: 2rem;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mes de Operación</th>
+                        <th>Ventas Totales</th>
+                        <th>Utilidad Libre (Neta)</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaBalanceMensual"></tbody>
+            </table>
+        </div>
+
         <button type="button" onclick="reiniciarCajaActual()" class="btn-danger">🗑️ Limpiar caja actual del día</button>
     </div>
 
@@ -495,21 +534,19 @@
         var pedidosRegistrados = [];
         var catalogoProductos = {};
         var baseInicialCaja = 60000;
+        var prestamosTinto = {}; // Deudas por categoría con Ahorro Tinto
         var miGrafica = null;
         var db = null;
 
         function parsearMontoCOP(val) {
             if (val === null || val === undefined || val === '') return 0;
-            
             if (typeof val === 'number') {
                 if (isNaN(val)) return 0;
                 return val;
             }
-            
             if (typeof val === 'string') {
                 var str = val.replace(/[\$\s]/g, '').trim();
                 if (!str) return 0;
-                
                 if (str.includes('.')) {
                     var partes = str.split('.');
                     if (partes.length > 1 && partes[partes.length - 1].length === 3) {
@@ -704,10 +741,49 @@
 
         function marcarPedidoRecibido(index) {
             var ped = pedidosRegistrados[index];
-            if (ped && confirm("¿Confirmas que el pedido \"" + ped.nombre + "\" ya fue recibido?")) {
+            if (!ped) return;
+
+            var catKey = ped.categoria || 'Tienda';
+            var disponibleFondo = 0;
+            
+            // Buscar disponible actual
+            ventasRegistradas.forEach(function(item) {
+                if (!item.esAhorroTinto && !item.esAhorroSandwich && (item.categoria || 'Tienda') === catKey) {
+                    disponibleFondo += (parseFloat(item.costoUnit) || 0) * (parseInt(item.cantidad) || 1);
+                }
+            });
+
+            var faltante = ped.costo - disponibleFondo;
+
+            if (faltante > 0) {
+                var responder = confirm("El pedido de " + ped.nombre + " ($" + formatCOP(ped.costo) + ") supera el fondo de " + catKey + " por $" + formatCOP(faltante) + ".\n\n¿Deseas registrar estos $" + formatCOP(faltante) + " como un PRÉSTAMO tomado del Ahorro Tinto?");
+                if (responder) {
+                    prestamosTinto[catKey] = (prestamosTinto[catKey] || 0) + faltante;
+                }
+            }
+
+            if (confirm("¿Confirmas marcar el pedido \"" + ped.nombre + "\" como Recibido?")) {
                 pedidosRegistrados.splice(index, 1);
                 recalcularYPintar();
                 sincronizarEstado();
+            }
+        }
+
+        function reembolsarAhorroTinto(catKey, montoMaximoAbonar) {
+            var deudaActual = prestamosTinto[catKey] || 0;
+            if (deudaActual <= 0) return;
+
+            var montoAbono = Math.min(deudaActual, montoMaximoAbonar);
+            if (montoAbono <= 0) {
+                alert("No hay saldo disponible en el Fondo de Reposición de " + catKey + " para hacer un reembolso en este momento.");
+                return;
+            }
+
+            if (confirm("¿Deseas reembolsar $" + formatCOP(montoAbono) + " desde el Fondo de Reposición (" + catKey + ") de vuelta a la bolsa de Ahorro Tinto?")) {
+                prestamosTinto[catKey] = deudaActual - montoAbono;
+                recalcularYPintar();
+                sincronizarEstado();
+                alert("✅ Reembolso registrado con éxito. Recuerda mover $" + formatCOP(montoAbono) + " físicamente a la bolsa de Ahorro Tinto.");
             }
         }
 
@@ -886,73 +962,21 @@
 
         function reconstruirCatalogoDesdeHistorial() {
             if (!catalogoProductos) catalogoProductos = {};
-            
             ventasRegistradas.forEach(function(item) {
                 if (item.nombreBase && item.costoUnit > 0 && item.precioUnit > 0 && !item.esAhorroTinto && !item.esAhorroSandwich) {
-                    catalogoProductos[item.nombreBase] = {
-                        costo: item.costoUnit,
-                        precio: item.precioUnit,
-                        categoria: item.categoria || 'Tienda'
-                    };
+                    catalogoProductos[item.nombreBase] = { costo: item.costoUnit, precio: item.precioUnit, categoria: item.categoria };
                 }
             });
-
-            if (historialDias && historialDias.length > 0) {
-                historialDias.forEach(function(dia) {
-                    if (dia.detalleVentas && dia.detalleVentas.length > 0) {
-                        dia.detalleVentas.forEach(function(prod) {
-                            if (prod.nombreBase && prod.costoUnit > 0 && prod.precioUnit > 0 && !prod.esAhorroTinto && !prod.esAhorroSandwich) {
-                                if (!catalogoProductos[prod.nombreBase]) {
-                                    catalogoProductos[prod.nombreBase] = {
-                                        costo: prod.costoUnit,
-                                        precio: prod.precioUnit,
-                                        categoria: prod.categoria || 'Tienda'
-                                    };
-                                }
-                            }
-                        });
-                    }
-                });
-            }
+            historialDias.forEach(function(dia) {
+                if (dia.detalleVentas) {
+                    dia.detalleVentas.forEach(function(item) {
+                        if (item.nombreBase && item.costoUnit > 0 && item.precioUnit > 0 && !item.esAhorroTinto && !item.esAhorroSandwich) {
+                            catalogoProductos[item.nombreBase] = { costo: item.costoUnit, precio: item.precioUnit, categoria: item.categoria };
+                        }
+                    });
+                }
+            });
             actualizarDatalist();
-        }
-
-        function sincronizarEstado() {
-            try {
-                localStorage.setItem('caja_ventas_v13', JSON.stringify(ventasRegistradas));
-                localStorage.setItem('caja_pedidos_v13', JSON.stringify(pedidosRegistrados));
-                localStorage.setItem('caja_base_v13', JSON.stringify(baseInicialCaja));
-                localStorage.setItem('caja_catalogo_v13', JSON.stringify(catalogoProductos));
-                localStorage.setItem('caja_historial_v13', JSON.stringify(historialDias));
-            } catch(e) { console.warn("Error local:", e); }
-
-            if (db) {
-                db.collection('caja').doc('estado_actual').set({
-                    baseInicialCaja: baseInicialCaja,
-                    ventasRegistradas: ventasRegistradas,
-                    pedidosRegistrados: pedidosRegistrados,
-                    catalogoProductos: catalogoProductos
-                }).then(function() {
-                    actualizarBadgeCloud(true);
-                }).catch(function(err) {
-                    console.warn("Error al guardar en Firebase:", err);
-                    actualizarBadgeCloud(false);
-                });
-            }
-        }
-
-        function actualizarBadgeCloud(esNube) {
-            var badge = document.getElementById('cloudBadge');
-            if (!badge) return;
-            if (esNube) {
-                badge.innerText = "☁️ Sincronizado en Nube";
-                badge.style.background = "#e0f2fe";
-                badge.style.color = "#0369a1";
-            } else {
-                badge.innerText = "💾 Local Activo";
-                badge.style.background = "#dcfce7";
-                badge.style.color = "#15803d";
-            }
         }
 
         function limpiarFormulario() {
@@ -962,483 +986,622 @@
             document.getElementById('cantidad').value = '1';
             document.getElementById('metodoPago').value = 'efectivo';
             document.getElementById('montoEfectivoMixto').value = '';
-            togglePagoMixto();
-            document.getElementById('categoria').value = 'Tienda';
             document.getElementById('esAhorroTinto').checked = false;
             document.getElementById('esAhorroSandwich').checked = false;
+            togglePagoMixto();
             document.getElementById('nombre').focus();
         }
 
-        function obtenerClaseBadgeCategoria(cat) {
-            switch(cat) {
-                case 'Cerveza': return 'cat-cerveza';
-                case 'Huevos': return 'cat-huevos';
-                case 'Mustang':
-                case 'Lucky': return 'cat-cigarrillo';
-                case 'Impresiones': return 'cat-impresiones';
-                case 'Papelería': return 'cat-papeleria';
-                default: return 'cat-tienda';
-            }
-        }
-
         function recalcularYPintar() {
-            try {
-                var fondoReposicionTiendaGen = 0;
-                var fondoGanancias = 0;
-                var gananciaEfectivo = 0;
-                var gananciaTransferencia = 0;
-                var fondoTinto = 0;
-                var fondoSandwich = 0;
-                var totalEfectivoVentas = 0;
-                var totalTransferencia = 0;
+            var totalCaja = 0, totalGananciaBruta = 0;
+            var totalReposicion = 0, totalTinto = 0, totalSandwich = 0;
+            var totalTransferencia = 0, totalEfectivoIngresado = 0;
+            var gananciaEfectivo = 0, gananciaTransferencia = 0;
+            
+            var desgloseGatosCategorias = {
+                'Tienda': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Cerveza': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Huevos': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Mustang': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Lucky': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Impresiones': { reposicion: 0, ganancia: 0, ventas: 0 },
+                'Papelería': { reposicion: 0, ganancia: 0, ventas: 0 }
+            };
 
-                var statsPorCat = {
-                    'Cerveza': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Huevos': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Mustang': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Lucky': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Impresiones': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Papelería': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 },
-                    'Tienda': { costo: 0, venta: 0, ganancia: 0, costoEfectivo: 0, costoTransferencia: 0, ventaEfectivo: 0, ventaTransferencia: 0 }
-                };
+            var tbody = document.getElementById('listaVentas');
+            if (tbody) tbody.innerHTML = '';
 
-                var conteoProductos = {};
-
-                var tbody = document.getElementById('listaVentas');
-                if (tbody) tbody.innerHTML = '';
-
-                ventasRegistradas.forEach(function(item, index) {
-                    var cantidad = parseInt(item.cantidad) || 1;
-                    var precioUnit = parseFloat(item.precioUnit) || 0;
-                    var costoUnit = parseFloat(item.costoUnit) || 0;
-
-                    var ingresoItem = precioUnit * cantidad;
-                    var costoItem = costoUnit * cantidad;
-                    var gananciaItem = ingresoItem - costoItem;
-                    
-                    var itemEfcVenta = 0;
-                    var itemTrfVenta = 0;
-                    var itemEfcCosto = 0;
-                    var itemTrfCosto = 0;
-
-                    var tdMetodo = '';
-                    if (item.metodoPago === 'efectivo') {
-                        tdMetodo = '<span class="etiqueta-pago etiqueta-efectivo">💵 Efectivo</span>';
-                        itemEfcVenta = ingresoItem;
-                        itemEfcCosto = costoItem;
-                        totalEfectivoVentas += ingresoItem;
-                    } else if (item.metodoPago === 'transferencia') {
-                        tdMetodo = '<span class="etiqueta-pago etiqueta-transf">📱 Transf.</span>';
-                        itemTrfVenta = ingresoItem;
-                        itemTrfCosto = costoItem;
-                        totalTransferencia += ingresoItem;
-                    } else if (item.metodoPago === 'mixto') {
-                        itemEfcVenta = parseFloat(item.montoEfectivoMixto) || 0;
-                        itemTrfVenta = Math.max(0, ingresoItem - itemEfcVenta);
-                        var propEfc = ingresoItem > 0 ? (itemEfcVenta / ingresoItem) : 0;
-                        itemEfcCosto = costoItem * propEfc;
-                        itemTrfCosto = costoItem * (1 - propEfc);
-
-                        totalEfectivoVentas += itemEfcVenta;
-                        totalTransferencia += itemTrfVenta;
-                        tdMetodo = '<span class="etiqueta-pago etiqueta-mixto">💳 Mixto ($' + formatCOP(itemEfcVenta) + ' Efc)</span>';
-                    } else {
-                        tdMetodo = '<span class="etiqueta-pago etiqueta-efectivo">💵 Efectivo</span>';
-                        itemEfcVenta = ingresoItem;
-                        itemEfcCosto = costoItem;
-                        totalEfectivoVentas += ingresoItem;
-                    }
-
-                    var nombre = item.nombreBase || 'Producto';
-                    var tdCostoTotal = '$' + formatCOP(costoItem);
-                    var tdGanancia = '$' + formatCOP(gananciaItem);
-                    var claseFila = gananciaItem >= 0 ? 'ganancia-positiva' : 'ganancia-negativa';
-
-                    if (item.esAhorroTinto) {
-                        fondoTinto += ingresoItem;
-                        nombre = "☕ " + item.nombreBase;
-                        tdCostoTotal = "-"; 
-                        tdGanancia = "Ahorro Tinto (+$" + formatCOP(ingresoItem) + ")";
-                        claseFila = "ahorro-tinto-texto";
-                    } else if (item.esAhorroSandwich) {
-                        fondoSandwich += ingresoItem;
-                        nombre = "🥪 " + item.nombreBase;
-                        tdCostoTotal = "-"; 
-                        tdGanancia = "Ahorro Sandwich (+$" + formatCOP(ingresoItem) + ")";
-                        claseFila = "ahorro-sandwich-texto";
-                    } else {
-                        fondoGanancias += gananciaItem;
-
-                        gananciaEfectivo += (itemEfcVenta - itemEfcCosto);
-                        gananciaTransferencia += (itemTrfVenta - itemTrfCosto);
-
-                        var catKey = (item.categoria && statsPorCat[item.categoria]) ? item.categoria : 'Tienda';
-                        statsPorCat[catKey].costo += costoItem;
-                        statsPorCat[catKey].venta += ingresoItem;
-                        statsPorCat[catKey].ganancia += gananciaItem;
-                        statsPorCat[catKey].costoEfectivo += itemEfcCosto;
-                        statsPorCat[catKey].costoTransferencia += itemTrfCosto;
-                        statsPorCat[catKey].ventaEfectivo += itemEfcVenta;
-                        statsPorCat[catKey].ventaTransferencia += itemTrfVenta;
-
-                        if (catKey === 'Tienda') {
-                            fondoReposicionTiendaGen += costoItem;
-                        }
-
-                        var keyProd = item.nombreBase + ' (' + catKey + ')';
-                        conteoProductos[keyProd] = (conteoProductos[keyProd] || 0) + cantidad;
-                    }
-
-                    var claseBadge = obtenerClaseBadgeCategoria(item.categoria || 'Tienda');
-                    var catBadge = '<span class="' + claseBadge + '">' + (item.categoria || 'Tienda') + '</span>';
-
-                    if (tbody) {
-                        var row = '<tr>' +
-                            '<td><b>' + nombre + '</b> ' + catBadge + '</td>' +
-                            '<td>' + cantidad + '</td>' +
-                            '<td>' + tdCostoTotal + '</td>' +
-                            '<td>$' + formatCOP(ingresoItem) + '</td>' +
-                            '<td>' + tdMetodo + '</td>' +
-                            '<td class="' + claseFila + '">' + tdGanancia + '</td>' +
-                            '<td>' +
-                                '<button type="button" class="btn-accion btn-editar" onclick="editarVenta(' + index + ')">✏️</button>' +
-                                '<button type="button" class="btn-accion btn-eliminar" onclick="eliminarVenta(' + index + ')">🗑️</button>' +
-                            '</td>' +
-                        '</tr>';
-                        tbody.insertAdjacentHTML('beforeend', row);
-                    }
-                });
-
-                var efectivoTotalCaja = baseInicialCaja + totalEfectivoVentas;
-
-                var totalVentas = fondoReposicionTiendaGen + fondoGanancias + fondoTinto + fondoSandwich + 
-                    statsPorCat['Cerveza'].costo + statsPorCat['Huevos'].costo + 
-                    statsPorCat['Mustang'].costo + statsPorCat['Lucky'].costo + 
-                    statsPorCat['Impresiones'].costo + statsPorCat['Papelería'].costo;
-
-                setText('valReposicion', '$' + formatCOP(fondoReposicionTiendaGen));
-                setText('valEfectivo', '$' + formatCOP(efectivoTotalCaja));
-                setText('valTransferencia', '$' + formatCOP(totalTransferencia));
-                setText('valCaja', '$' + formatCOP(totalVentas));
+            ventasRegistradas.forEach(function(item, index) {
+                var cant = parseInt(item.cantidad) || 1;
+                var prec = parseFloat(item.precioUnit) || 0;
+                var cost = parseFloat(item.costoUnit) || 0;
                 
-                setText('valGananciaEfectivo', '$' + formatCOP(gananciaEfectivo));
-                setText('valGananciaTransferencia', '$' + formatCOP(gananciaTransferencia));
+                var ingreso = prec * cant;
+                var costoTot = cost * cant;
+                var ganancia = ingreso - costoTot;
 
-                var metaLocal = 40000;
-                var gananciaUtilizadaLocal = Math.min(fondoGanancias, metaLocal);
-                var gananciaLibreReal = Math.max(0, fondoGanancias - metaLocal);
+                totalCaja += ingreso;
 
-                setText('valGanancias', '$' + formatCOP(gananciaUtilizadaLocal));
-                setText('valGananciaReal', '$' + formatCOP(gananciaLibreReal));
+                var itemEfcVenta = 0, itemTrfVenta = 0;
+                var itemEfcCosto = 0, itemTrfCosto = 0;
 
-                var textoMeta = document.getElementById('metaSostenimientoText');
-                var cajaUtilidadesBox = document.getElementById('cajaUtilidadesBox');
-                if (fondoGanancias >= metaLocal) {
-                    if (textoMeta) textoMeta.innerHTML = '✅ Gastos del local cubiertos ($' + formatCOP(gananciaEfectivo) + ' Efc / $' + formatCOP(gananciaTransferencia) + ' Trf)';
-                    if (cajaUtilidadesBox) cajaUtilidadesBox.style.borderColor = '#10b981';
+                if (item.metodoPago === 'transferencia') {
+                    itemTrfVenta = ingreso;
+                    itemTrfCosto = costoTot;
+                    totalTransferencia += ingreso;
+                } else if (item.metodoPago === 'efectivo') {
+                    itemEfcVenta = ingreso;
+                    itemEfcCosto = costoTot;
+                    totalEfectivoIngresado += ingreso;
+                } else if (item.metodoPago === 'mixto') {
+                    var efcMix = parseFloat(item.montoEfectivoMixto) || 0;
+                    var trfMix = Math.max(0, ingreso - efcMix);
+                    itemEfcVenta = efcMix;
+                    itemTrfVenta = trfMix;
+                    var propEfc = (ingreso > 0) ? (efcMix / ingreso) : 0;
+                    itemEfcCosto = costoTot * propEfc;
+                    itemTrfCosto = costoTot * (1 - propEfc);
+                    totalEfectivoIngresado += efcMix;
+                    totalTransferencia += trfMix;
                 } else {
-                    var falta = metaLocal - fondoGanancias;
-                    if (textoMeta) textoMeta.innerHTML = '⚠️ Faltan $' + formatCOP(falta) + ' para el local';
-                    if (cajaUtilidadesBox) cajaUtilidadesBox.style.borderColor = '#f59e0b';
+                    itemEfcVenta = ingreso;
+                    itemEfcCosto = costoTot;
+                    totalEfectivoIngresado += ingreso;
                 }
 
-                setText('valTinto', '$' + formatCOP(fondoTinto));
-                setText('valSandwich', '$' + formatCOP(fondoSandwich));
+                var ganEfcItem = itemEfcVenta - itemEfcCosto;
+                var ganTrfItem = itemTrfVenta - itemTrfCosto;
 
-                var contenedorCat = document.getElementById('resumenCategorias');
-                if (contenedorCat) {
-                    contenedorCat.innerHTML = '';
-                    var nombresBonitos = {
-                        'Cerveza': '🍺 Cerveza', 'Huevos': '🥚 Huevos', 'Mustang': '🚬 Mustang',
-                        'Lucky': '🚬 Lucky', 'Impresiones': '🖨️ Impresiones', 'Papelería': '✏️️ Papelería', 'Tienda': '🛒 Tienda (Gen)'
-                    };
+                var claseGanancia = ganancia >= 0 ? "ganancia-positiva" : "ganancia-negativa";
+                var destinoTexto = "";
+                var esAhorro = false;
 
-                    for (var cat in statsPorCat) {
-                        var data = statsPorCat[cat];
+                if (item.esAhorroTinto) {
+                    totalTinto += ingreso;
+                    destinoTexto = "<span class=\"ahorro-tinto-texto\">☕ Ahorro Tinto (+$" + formatCOP(ingreso) + ")</span>";
+                    esAhorro = true;
+                } else if (item.esAhorroSandwich) {
+                    totalSandwich += ingreso;
+                    destinoTexto = "<span class=\"ahorro-sandwich-texto\">🥪 Ahorro Sandwich (+$" + formatCOP(ingreso) + ")</span>";
+                    esAhorro = true;
+                } else {
+                    totalReposicion += costoTot;
+                    totalGananciaBruta += ganancia;
+                    gananciaEfectivo += ganEfcItem;
+                    gananciaTransferencia += ganTrfItem;
+
+                    destinoTexto = "Rep: $" + formatCOP(costoTot) + " | <span class=\"" + claseGanancia + "\">Gan: $" + formatCOP(ganancia) + "</span>";
+                    
+                    var catKey = item.categoria || 'Tienda';
+                    if (!desgloseGatosCategorias[catKey]) {
+                        desgloseGatosCategorias[catKey] = { reposicion: 0, ganancia: 0, ventas: 0 };
+                    }
+                    desgloseGatosCategorias[catKey].reposicion += costoTot;
+                    desgloseGatosCategorias[catKey].ganancia += ganancia;
+                    desgloseGatosCategorias[catKey].ventas += ingreso;
+                }
+
+                if (tbody) {
+                    var prodNombre = item.nombreBase || 'Venta';
+                    if (item.esAhorroTinto) prodNombre = "☕ " + prodNombre;
+                    if (item.esAhorroSandwich) prodNombre = "🥪 " + prodNombre;
+
+                    var claseBadge = "cat-tienda";
+                    if (item.categoria === 'Cerveza') claseBadge = "cat-cerveza";
+                    else if (item.categoria === 'Huevos') claseBadge = "cat-huevos";
+                    else if (item.categoria === 'Mustang' || item.categoria === 'Lucky') claseBadge = "cat-cigarrillo";
+                    else if (item.categoria === 'Impresiones') claseBadge = "cat-impresiones";
+                    else if (item.categoria === 'Papelería') claseBadge = "cat-papeleria";
+
+                    var pagoHtml = "";
+                    if (item.metodoPago === 'efectivo') pagoHtml = "<span class=\"etiqueta-pago etiqueta-efectivo\">💵 Efectivo</span>";
+                    else if (item.metodoPago === 'transferencia') pagoHtml = "<span class=\"etiqueta-pago etiqueta-transf\">📱 Transf.</span>";
+                    else if (item.metodoPago === 'mixto') pagoHtml = "<span class=\"etiqueta-pago etiqueta-mixto\">💳 Mixto (Efc:$" + formatCOP(item.montoEfectivoMixto) + ")</span>";
+
+                    var costHTml = esAhorro ? "N/A" : "$" + formatCOP(costoTot) + " <small style='color:#6b7280;'>($" + formatCOP(cost) + "/u)</small>";
+
+                    tbody.innerHTML += 
+                        "<tr>" +
+                            "<td><b>" + prodNombre + "</b><br><span class=\"" + claseBadge + "\">" + (item.categoria || 'Tienda') + "</span></td>" +
+                            "<td>" + cant + "</td>" +
+                            "<td>" + costHTml + "</td>" +
+                            "<td>$" + formatCOP(ingreso) + " <small style='color:#6b7280;'>($" + formatCOP(prec) + "/u)</small></td>" +
+                            "<td>" + pagoHtml + "</td>" +
+                            "<td>" + destinoTexto + "</td>" +
+                            "<td>" +
+                                "<button type=\"button\" class=\"btn-accion btn-editar\" onclick=\"editarVenta(" + index + ")\">✏️</button>" +
+                                "<button type=\"button\" class=\"btn-accion btn-eliminar\" onclick=\"eliminarVenta(" + index + ")\">🗑️</button>" +
+                            "</td>" +
+                        "</tr>";
+                }
+            });
+
+            var contenedorCat = document.getElementById('resumenCategorias');
+            if (contenedorCat) {
+                contenedorCat.innerHTML = '';
+                for (var cat in desgloseGatosCategorias) {
+                    var d = desgloseGatosCategorias[cat];
+                    if (d.ventas > 0) {
+                        var porc = (d.ganancia / d.ventas * 100).toFixed(1);
                         contenedorCat.innerHTML += 
                             '<div class="fondo-box cat-card">' +
-                                '<div class="cat-nombre">' + nombresBonitos[cat] + '</div>' +
+                                '<div class="cat-nombre">' + cat + '</div>' +
                                 '<div class="cat-detalles">' +
-                                    '<div>Venta Total: <b>$' + formatCOP(data.venta) + '</b></div>' +
-                                    '<div style="font-size: 0.78rem; color: #4b5563; margin-left: 0.2rem;">' +
-                                        '💵 Efc: $' + formatCOP(data.ventaEfectivo) + ' | 📱 Trf: $' + formatCOP(data.ventaTransferencia) +
+                                    '<div>Fondo Reposición: <b>$' + formatCOP(d.reposicion) + '</b></div>' +
+                                    '<div>Utilidad Generada: <b>$' + formatCOP(d.ganancia) + '</b></div>' +
+                                    '<div style="margin-top:0.3rem; border-top: 1px dashed #d8b4fe; padding-top:0.2rem; font-size:0.75rem;">' +
+                                        'Margen de la categoría: <b>' + porc + '%</b>' +
                                     '</div>' +
-                                    '<div style="color: #b91c1c; margin-top: 0.4rem;">Costo (A separar): <b>$' + formatCOP(data.costo) + '</b></div>' +
-                                    '<div class="desglose-costo-box">' +
-                                        '<div style="color: #0369a1;">💵 En Efectivo: <b>$' + formatCOP(data.costoEfectivo) + '</b></div>' +
-                                        '<div style="color: #6b21a8;">📱 En Transferencia: <b>$' + formatCOP(data.costoTransferencia) + '</b></div>' +
-                                    '</div>' +
-                                    '<div style="color: #047857; margin-top: 0.4rem;">Ganancia: <b>$' + formatCOP(data.ganancia) + '</b></div>' +
+                                '</div>' +
+                            '</div>';
+                    }
+                }
+            }
+
+            // Calcular préstamos internos acumulados
+            var totalPrestadoTinto = 0;
+            for (var k in prestamosTinto) {
+                totalPrestadoTinto += (parseFloat(prestamosTinto[k]) || 0);
+            }
+
+            var tintoDisponibleNeto = Math.max(0, totalTinto - totalPrestadoTinto);
+
+            var contPrestamos = document.getElementById('contenedorPrestamosInternos');
+            if (contPrestamos) {
+                contPrestamos.innerHTML = '';
+                var hayDeudas = false;
+
+                for (var catDeuda in prestamosTinto) {
+                    var montoDeuda = prestamosTinto[catDeuda] || 0;
+                    if (montoDeuda > 0) {
+                        hayDeudas = true;
+                        var dispFondoCat = desgloseGatosCategorias[catDeuda] ? desgloseGatosCategorias[catDeuda].reposicion : 0;
+                        var abonoPosible = Math.min(montoDeuda, dispFondoCat);
+
+                        contPrestamos.innerHTML += 
+                            '<div class="fondo-box cat-card" style="background:#fffbeb; border-color:#fde68a;">' +
+                                '<div class="cat-nombre" style="color:#92400e;">⚠️ ' + catDeuda + ' debe a Ahorro Tinto</div>' +
+                                '<div class="cat-detalles">' +
+                                    '<div>Deuda pendiente: <b style="color:#dc2626;">$' + formatCOP(montoDeuda) + '</b></div>' +
+                                    '<div>Disponible en Reposición: <b>$' + formatCOP(dispFondoCat) + '</b></div>' +
+                                    '<button type="button" class="btn-accion btn-recibido" style="margin-top:0.5rem;" onclick="reembolsarAhorroTinto(\'' + catDeuda + '\', ' + dispFondoCat + ')">🔄 Reembolsar $' + formatCOP(abonoPosible) + ' a Tinto</button>' +
                                 '</div>' +
                             '</div>';
                     }
                 }
 
-                var tbodyPedidos = document.getElementById('listaPedidos');
-                if (tbodyPedidos) {
-                    tbodyPedidos.innerHTML = '';
-                    if (pedidosRegistrados.length === 0) {
-                        tbodyPedidos.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6b7280;">No hay pedidos por recibir registrados.</td></tr>';
-                    } else {
-                        // 1. Ordenar pedidos cronológicamente por la fecha de recepción
-                        pedidosRegistrados.sort(function(a, b) {
-                            var fA = a.fechaRecepcion || '9999-99-99';
-                            var fB = b.fechaRecepcion || '9999-99-99';
-                            if (fA === 'N/A') fA = '9999-99-99';
-                            if (fB === 'N/A') fB = '9999-99-99';
-                            return fA.localeCompare(fB);
-                        });
-
-                        // 2. Acumular los requerimientos por categoría
-                        var acumuladoPorCat = {};
-
-                        pedidosRegistrados.forEach(function(ped, index) {
-                            var catKey = ped.categoria || 'Tienda';
-                            var disponibleFondo = catKey === 'Tienda' ? fondoReposicionTiendaGen : (statsPorCat[catKey] ? statsPorCat[catKey].costo : 0);
-                            
-                            acumuladoPorCat[catKey] = (acumuladoPorCat[catKey] || 0) + (parseFloat(ped.costo) || 0);
-                            var costoAcumuladoTotal = acumuladoPorCat[catKey];
-
-                            var alcanza = disponibleFondo >= costoAcumuladoTotal;
-                            var badgeEstado = alcanza ? 
-                                '<span class="badge-suficiente">✅ ¡Sí alcanza!</span>' : 
-                                '<span class="badge-insuficiente">⚠️ Falta $' + formatCOP(costoAcumuladoTotal - disponibleFondo) + '</span>';
-
-                            var claseBadge = obtenerClaseBadgeCategoria(ped.categoria);
-
-                            tbodyPedidos.innerHTML += 
-                                '<tr>' +
-                                    '<td><b>' + ped.nombre + '</b></td>' +
-                                    '<td><span class="' + claseBadge + '">' + ped.categoria + '</span></td>' +
-                                    '<td>$' + formatCOP(ped.costo) + '</td>' +
-                                    '<td>📅 ' + ped.fechaPedido + '</td>' +
-                                    '<td>📅 ' + ped.fechaRecepcion + '</td>' +
-                                    '<td>$' + formatCOP(disponibleFondo) + '</td>' +
-                                    '<td>' + badgeEstado + '</td>' +
-                                    '<td style="white-space: nowrap;">' +
-                                        '<button type="button" class="btn-accion btn-recibido" onclick="marcarPedidoRecibido(' + index + ')">📦 Recibido</button>' +
-                                        '<button type="button" class="btn-accion btn-reprogramar" onclick="reprogramarPedido(' + index + ')">📅 Reprogramar</button>' +
-                                        '<button type="button" class="btn-accion btn-eliminar" onclick="eliminarPedido(' + index + ')">🗑️</button>' +
-                                    '</td>' +
-                                '</tr>';
-                        });
-                    }
+                if (!hayDeudas) {
+                    contPrestamos.innerHTML = '<div style="font-size:0.85rem; color:#6b7280; padding:0.5rem;">✅ No hay deudas pendientes con Ahorro Tinto.</div>';
                 }
-
-                var contenedorMasVendidos = document.getElementById('productosMasVendidos');
-                if (contenedorMasVendidos) {
-                    contenedorMasVendidos.innerHTML = '';
-                    var ordenados = Object.entries(conteoProductos).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 4);
-                    if (ordenados.length === 0) {
-                        contenedorMasVendidos.innerHTML = '<div class="fondo-box cat-card"><div class="cat-detalles">Sin ventas registradas aún</div></div>';
-                    } else {
-                        ordenados.forEach(function(item) {
-                            var prod = item[0];
-                            var cant = item[1];
-                            contenedorMasVendidos.innerHTML += 
-                                '<div class="fondo-box cat-card">' +
-                                    '<div class="cat-nombre">🔥 ' + prod + '</div>' +
-                                    '<div class="cat-detalles"><div>Cantidad vendida: <b>' + cant + ' un.</b></div></div>' +
-                                '</div>';
-                        });
-                    }
-                }
-            } catch(e) { console.error("Error recalcularYPintar:", e); }
-        }
-
-        function setText(id, text) {
-            var el = document.getElementById(id);
-            if (el) el.innerText = text;
-        }
-
-        function renderizarHistorial() {
-            var tbodyHistorial = document.getElementById('tablaHistorial');
-            if (!tbodyHistorial) return;
-            tbodyHistorial.innerHTML = '';
-
-            if (historialDias.length === 0) {
-                tbodyHistorial.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#6b7280;">Sin registros anteriores.</td></tr>';
-                return;
             }
 
-            historialDias.forEach(function(dia, index) {
-                var ventaReal = parsearMontoCOP(dia.venta);
-                var utilidadReal = parsearMontoCOP(dia.utilidad);
+            // Agrupar pedidos por fecha de recepción y calcular faltante
+            var pedidosPorFecha = {};
+            pedidosRegistrados.forEach(function(ped) {
+                var fechaKey = ped.fechaRecepcion || 'Sin fecha';
+                if (!pedidosPorFecha[fechaKey]) pedidosPorFecha[fechaKey] = { total: 0, items: [] };
+                pedidosPorFecha[fechaKey].total += (parseFloat(ped.costo) || 0);
+                pedidosPorFecha[fechaKey].items.push(ped);
+            });
 
-                tbodyHistorial.innerHTML += 
+            var divResumenFecha = document.getElementById('resumenTotalesPorFecha');
+            if (divResumenFecha) {
+                divResumenFecha.innerHTML = '';
+                
+                for (var fRec in pedidosPorFecha) {
+                    var grupo = pedidosPorFecha[fRec];
+                    
+                    // Calcular acumulado de costo por categoría en esta fecha
+                    var requeridosPorCat = {};
+                    grupo.items.forEach(function(p) {
+                        var c = p.categoria || 'Tienda';
+                        requeridosPorCat[c] = (requeridosPorCat[c] || 0) + (parseFloat(p.costo) || 0);
+                    });
+
+                    var faltanteFechaTotal = 0;
+                    var desgloseHtml = '';
+
+                    for (var cNombre in requeridosPorCat) {
+                        var reqCost = requeridosPorCat[cNombre];
+                        var dispFondo = desgloseGatosCategorias[cNombre] ? desgloseGatosCategorias[cNombre].reposicion : 0;
+                        var dif = reqCost - dispFondo;
+                        
+                        if (dif > 0) faltanteFechaTotal += dif;
+
+                        desgloseHtml += '<div style="font-size:0.85rem; margin-top:0.2rem;">• <b>' + cNombre + ':</b> Pedidos $' + formatCOP(reqCost) + ' | Fondo Disp: $' + formatCOP(dispFondo) + ' ' + (dif > 0 ? '<span style="color:#dc2626; font-weight:bold;">(Falta $' + formatCOP(dif) + ')</span>' : '<span style="color:#059669; font-weight:bold;">(Cubierto)</span>') + '</div>';
+                    }
+
+                    divResumenFecha.innerHTML += 
+                        '<div class="resumen-fecha-card">' +
+                            '<div class="resumen-fecha-header">' +
+                                '<span>📅 Pedidos para recibir el: ' + fRec + '</span>' +
+                                '<span>Total a Pagar: $' + formatCOP(grupo.total) + '</span>' +
+                            '</div>' +
+                            desgloseHtml +
+                            '<div style="margin-top:0.6rem; font-weight:bold; font-size:0.9rem; color:' + (faltanteFechaTotal > 0 ? '#b91c1c' : '#047857') + ';">' +
+                                (faltanteFechaTotal > 0 ? '⚠️ FALTANTE GLOBAL A CUBRIR PARA ESTA FECHA: $' + formatCOP(faltanteFechaTotal) : '🎉 ¡FONDOS SUFICIENTES PARA TODOS LOS PEDIDOS DE ESTA FECHA!') +
+                            '</div>' +
+                        '</div>';
+                }
+            }
+
+            var tbodyPedidos = document.getElementById('listaPedidos');
+            if (tbodyPedidos) {
+                tbodyPedidos.innerHTML = '';
+                pedidosRegistrados.forEach(function(ped, index) {
+                    var catKey = ped.categoria || 'Tienda';
+                    var fondoDisp = desgloseGatosCategorias[catKey] ? desgloseGatosCategorias[catKey].reposicion : 0;
+                    var alcanzado = fondoDisp >= ped.costo;
+                    var statusBadge = alcanzado ? "<span class=\"badge-suficiente\">✔️ Capital Listo</span>" : "<span class=\"badge-insuficiente\">❌ Faltan $" + formatCOP(ped.costo - fondoDisp) + "</span>";
+
+                    tbodyPedidos.innerHTML += 
+                        "<tr>" +
+                            "<td><b>" + ped.nombre + "</b></td>" +
+                            "<td>" + catKey + "</td>" +
+                            "<td>$" + formatCOP(ped.costo) + "</td>" +
+                            "<td>" + (ped.fechaPedido || 'N/A') + "</td>" +
+                            "<td>" + (ped.fechaRecepcion || 'N/A') + "</td>" +
+                            "<td>$" + formatCOP(fondoDisp) + "</td>" +
+                            "<td>" + statusBadge + "</td>" +
+                            "<td class=\"col-nowrap\">" +
+                                "<button type=\"button\" class=\"btn-accion btn-recibido\" title=\"Marcar como recibido\" onclick=\"marcarPedidoRecibido(" + index + ")\">📦 Recibido</button>" +
+                                "<button type=\"button\" class=\"btn-accion btn-reprogramar\" title=\"Reprogramar\" onclick=\"reprogramarPedido(" + index + ")\">📅</button>" +
+                                "<button type=\"button\" class=\"btn-accion btn-eliminar\" title=\"Eliminar\" onclick=\"eliminarPedido(" + index + ")\">🗑️</button>" +
+                            "</td>" +
+                        "</tr>";
+                });
+            }
+
+            actualizarProductosMasVendidos();
+
+            var totalFisicoEnCaja = baseInicialCaja + totalEfectivoIngresado;
+            if(document.getElementById('valCaja')) document.getElementById('valCaja').innerText = formatCOP(totalCaja);
+            if(document.getElementById('valEfectivo')) document.getElementById('valEfectivo').innerText = formatCOP(totalFisicoEnCaja);
+            if(document.getElementById('valTransferencia')) document.getElementById('valTransferencia').innerText = formatCOP(totalTransferencia);
+            
+            if(document.getElementById('valReposicion')) document.getElementById('valReposicion').innerText = formatCOP(totalReposicion);
+            if(document.getElementById('valTinto')) document.getElementById('valTinto').innerText = formatCOP(totalTinto) + " (Disp: $" + formatCOP(tintoDisponibleNeto) + ")";
+            
+            var subT = document.getElementById('subtextTintoPrestamos');
+            if (subT) {
+                if (totalPrestadoTinto > 0) {
+                    subT.innerText = "Tot. $" + formatCOP(totalTinto) + " - $" + formatCOP(totalPrestadoTinto) + " prestados a inventario";
+                } else {
+                    subT.innerText = "Acumulado disponible al 100%";
+                }
+            }
+
+            if(document.getElementById('valSandwich')) document.getElementById('valSandwich').innerText = formatCOP(totalSandwich);
+
+            // DESCONTAR 40K DEL EFECTIVO PRIORITARIAMENTE
+            var META_DIARIA = 40000;
+            var cubiertoEfectivo = Math.min(gananciaEfectivo, META_DIARIA);
+            var deficitRestante = Math.max(0, META_DIARIA - cubiertoEfectivo);
+            var cubiertoTransferencia = Math.min(gananciaTransferencia, deficitRestante);
+            var totalCubiertoLocal = cubiertoEfectivo + cubiertoTransferencia;
+
+            var gananciaEfectivoLibre = Math.max(0, gananciaEfectivo - cubiertoEfectivo);
+            var gananciaTransferenciaLibre = Math.max(0, gananciaTransferencia - cubiertoTransferencia);
+            var totalGananciaReal = gananciaEfectivoLibre + gananciaTransferenciaLibre;
+
+            var cajaUtilidadesBox = document.getElementById('cajaUtilidadesBox');
+            var metaText = document.getElementById('metaSostenimientoText');
+            
+            if(document.getElementById('valGanancias')) document.getElementById('valGanancias').innerText = formatCOP(totalCubiertoLocal);
+            
+            if (totalCubiertoLocal >= META_DIARIA) {
+                if(cajaUtilidadesBox) cajaUtilidadesBox.style.background = "#d1fae5";
+                if(metaText) { 
+                    if (cubiertoTransferencia > 0) {
+                        metaText.innerText = "✅ Cubierto: $" + formatCOP(cubiertoEfectivo) + " Efc + $" + formatCOP(cubiertoTransferencia) + " Trf 🎉";
+                    } else {
+                        metaText.innerText = "¡Meta cubierta 100% con Efectivo! 🎉";
+                    }
+                    metaText.style.color = "#065f46"; 
+                    metaText.style.fontWeight = "bold"; 
+                }
+            } else {
+                if(cajaUtilidadesBox) cajaUtilidadesBox.style.background = "#fff1f2";
+                if(metaText) { 
+                    var falta = META_DIARIA - totalCubiertoLocal;
+                    metaText.innerText = "Faltan $" + formatCOP(falta) + " para el local ($" + formatCOP(cubiertoEfectivo) + " tomados de Efc)"; 
+                    metaText.style.color = "#9f1239"; 
+                    metaText.style.fontWeight = "normal"; 
+                }
+            }
+
+            if(document.getElementById('valGananciaReal')) document.getElementById('valGananciaReal').innerText = formatCOP(totalGananciaReal);
+
+            if(document.getElementById('valGananciaEfectivo')) document.getElementById('valGananciaEfectivo').innerText = formatCOP(gananciaEfectivoLibre);
+            var subEfc = document.getElementById('subtextGananciaEfectivo');
+            if (subEfc) {
+                subEfc.innerText = "Efectivo libre en cajón (Tot. $" + formatCOP(gananciaEfectivo) + " - $" + formatCOP(cubiertoEfectivo) + " local)";
+            }
+
+            if(document.getElementById('valGananciaTransferencia')) document.getElementById('valGananciaTransferencia').innerText = formatCOP(gananciaTransferenciaLibre);
+            var subTrf = document.getElementById('subtextGananciaTransferencia');
+            if (subTrf) {
+                if (cubiertoTransferencia > 0) {
+                    subTrf.innerText = "Libre en banco (Tot. $" + formatCOP(gananciaTransferencia) + " - $" + formatCOP(cubiertoTransferencia) + " local)";
+                } else {
+                    subTrf.innerText = "Bolsillo digital libre (Sin descuento de local)";
+                }
+            }
+        }
+
+        function sincronizarEstado() {
+            var estado = {
+                ventasRegistradas: ventasRegistradas,
+                pedidosRegistrados: pedidosRegistrados,
+                catalogoProductos: catalogoProductos,
+                baseInicialCaja: baseInicialCaja,
+                prestamosTinto: prestamosTinto
+            };
+            localStorage.setItem('cajaDiariaEstado', JSON.stringify(estado));
+        }
+
+        function cargarEstado() {
+            var guardado = localStorage.getItem('cajaDiariaEstado');
+            if (guardado) {
+                try {
+                    var obj = JSON.parse(guardado);
+                    ventasRegistradas = obj.ventasRegistradas || [];
+                    pedidosRegistrados = obj.pedidosRegistrados || [];
+                    catalogoProductos = obj.catalogoProductos || {};
+                    prestamosTinto = obj.prestamosTinto || {};
+                    baseInicialCaja = (obj.baseInicialCaja !== undefined) ? obj.baseInicialCaja : 60000;
+                    
+                    var baseEl = document.getElementById('baseInicial');
+                    if (baseEl) baseEl.value = baseInicialCaja;
+                } catch(e) { console.error("Error al cargar estado local", e); }
+            }
+            actualizarDatalist();
+            recalcularYPintar();
+        }
+
+        function actualizarProductosMasVendidos() {
+            var conteoTotal = {};
+            var hoy = new Date();
+            hoy.setHours(23, 59, 59, 999);
+            var hace7Dias = new Date(hoy);
+            hace7Dias.setDate(hace7Dias.getDate() - 7);
+            hace7Dias.setHours(0, 0, 0, 0);
+
+            // 1. Sumar ventas de la caja actual
+            ventasRegistradas.forEach(function(item) {
+                if (item.esAhorroTinto || item.esAhorroSandwich) return;
+                var catKey = item.categoria || 'Tienda';
+                var keyProd = item.nombreBase + ' (' + catKey + ')';
+                var cant = parseInt(item.cantidad) || 1;
+                conteoTotal[keyProd] = (conteoTotal[keyProd] || 0) + cant;
+            });
+
+            // 2. Sumar ventas del historial (últimos 7 días)
+            if (historialDias && historialDias.length > 0) {
+                historialDias.forEach(function(dia) {
+                    var fechaDia = null;
+                    if (dia.timestamp) {
+                        fechaDia = new Date(dia.timestamp);
+                    } else if (dia.fecha) {
+                        var p = dia.fecha.split('/');
+                        if (p.length === 3) fechaDia = new Date(p[2], p[1] - 1, p[0]);
+                    }
+                    
+                    if (fechaDia && fechaDia >= hace7Dias && fechaDia <= hoy) {
+                        if (dia.detalleVentas && dia.detalleVentas.length > 0) {
+                            dia.detalleVentas.forEach(function(item) {
+                                if (item.esAhorroTinto || item.esAhorroSandwich) return;
+                                var catKey = item.categoria || 'Tienda';
+                                var keyProd = item.nombreBase + ' (' + catKey + ')';
+                                var cant = parseInt(item.cantidad) || 1;
+                                conteoTotal[keyProd] = (conteoTotal[keyProd] || 0) + cant;
+                            });
+                        }
+                    }
+                });
+            }
+
+            var contenedorMasVendidos = document.getElementById('productosMasVendidos');
+            if (contenedorMasVendidos) {
+                contenedorMasVendidos.innerHTML = '';
+                var ordenados = Object.entries(conteoTotal).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 6);
+                if (ordenados.length === 0) {
+                    contenedorMasVendidos.innerHTML = '<div class="fondo-box cat-card"><div class="cat-detalles">Sin ventas registradas en los últimos 7 días</div></div>';
+                } else {
+                    ordenados.forEach(function(item) {
+                        var prod = item[0];
+                        var cant = item[1];
+                        contenedorMasVendidos.innerHTML += 
+                            '<div class="fondo-box cat-card">' +
+                                '<div class="cat-nombre">🔥 ' + prod + '</div>' +
+                                '<div class="cat-detalles"><div>Cantidad vendida: <b>' + cant + ' un.</b></div></div>' +
+                            '</div>';
+                    });
+                }
+            }
+        }
+
+        function renderizarBalanceMensual() {
+            var tbodyMensual = document.getElementById('tablaBalanceMensual');
+            if (!tbodyMensual) return;
+            
+            var balances = {};
+            
+            historialDias.forEach(function(dia) {
+                var fechaDia = null;
+                if (dia.timestamp) {
+                    fechaDia = new Date(dia.timestamp);
+                } else if (dia.fecha) {
+                    var p = dia.fecha.split('/');
+                    if (p.length === 3) fechaDia = new Date(p[2], p[1] - 1, p[0]);
+                }
+                
+                if (fechaDia) {
+                    var mesStr = fechaDia.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
+                    mesStr = mesStr.charAt(0).toUpperCase() + mesStr.slice(1);
+                    
+                    if (!balances[mesStr]) {
+                        balances[mesStr] = { ventas: 0, utilidades: 0, ms: fechaDia.getTime() };
+                    }
+                    balances[mesStr].ventas += parsearMontoCOP(dia.venta);
+                    balances[mesStr].utilidades += parsearMontoCOP(dia.utilidad);
+                }
+            });
+            
+            var mesesOrdenados = Object.keys(balances).sort(function(a, b) {
+                return balances[b].ms - balances[a].ms;
+            });
+            
+            tbodyMensual.innerHTML = '';
+            if (mesesOrdenados.length === 0) {
+                tbodyMensual.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#6b7280;">Aún no hay registros para generar balance.</td></tr>';
+                return;
+            }
+            
+            mesesOrdenados.forEach(function(mes) {
+                var b = balances[mes];
+                tbodyMensual.innerHTML += 
                     '<tr>' +
-                        '<td class="col-nowrap"><b>' + (dia.fecha || 'N/A') + '</b></td>' +
-                        '<td class="col-nowrap" style="font-weight: bold; color: #1e3a8a;">$' + formatCOP(ventaReal) + '</td>' +
-                        '<td class="col-nowrap" style="font-weight: bold; color: #059669;">$' + formatCOP(utilidadReal) + '</td>' +
-                        '<td>' + (dia.cuadre || 'N/A') + '</td>' +
-                        '<td class="col-nowrap">' +
-                            '<button type="button" class="btn-accion btn-reprogramar" onclick="verDetalleDia(' + index + ')">👁️ Ver Detalle</button>' +
-                            '<button type="button" class="btn-accion btn-eliminar" onclick="eliminarDia(\'' + (dia.id || '') + '\', ' + index + ')">🗑</button>' +
-                        '</td>' +
+                        '<td><b>' + mes + '</b></td>' +
+                        '<td style="color: #1e3a8a; font-weight: bold;">$' + formatCOP(b.ventas) + '</td>' +
+                        '<td style="color: #059669; font-weight: bold;">$' + formatCOP(b.utilidades) + '</td>' +
                     '</tr>';
             });
         }
 
+        function renderizarHistorial() {
+            var tbodyHistorial = document.getElementById('tablaHistorial');
+            if (tbodyHistorial) {
+                tbodyHistorial.innerHTML = '';
+                historialDias.forEach(function(dia, index) {
+                    var hasDetalle = dia.detalleVentas && dia.detalleVentas.length > 0;
+                    var btnDetalle = hasDetalle 
+                        ? "<button type=\"button\" class=\"btn-accion btn-reprogramar\" onclick=\"verDetalleDia(" + index + ")\">🔍 Ver Detalle</button>"
+                        : "<span style=\"font-size:0.8rem; color:#9ca3af;\">Sin detalle</span>";
+                        
+                    tbodyHistorial.innerHTML += 
+                        "<tr>" +
+                            "<td class=\"col-nowrap\">" + (dia.fecha || 'N/A') + "</td>" +
+                            "<td class=\"col-nowrap\">$" + formatCOP(dia.venta) + "</td>" +
+                            "<td class=\"col-nowrap\">$" + formatCOP(dia.utilidad) + "</td>" +
+                            "<td><span style=\"font-size:0.85rem;\">" + (dia.cuadre || '-') + "</span></td>" +
+                            "<td class=\"col-nowrap\">" +
+                                btnDetalle + 
+                                "<button type=\"button\" class=\"btn-accion btn-eliminar\" onclick=\"eliminarDia('" + dia.id + "', " + index + ")\" style=\"margin-left: 0.5rem;\">🗑️</button>" +
+                            "</td>" +
+                        "</tr>";
+                });
+            }
+            
+            actualizarProductosMasVendidos();
+            renderizarBalanceMensual();
+        }
+
         function actualizarGrafica() {
-            try {
-                if (typeof Chart === 'undefined') return;
-                var canvasEl = document.getElementById('graficaVentas');
-                if (!canvasEl) return;
-                var ctx = canvasEl.getContext('2d');
-                var labels = historialDias.map(function(d) { return d.fecha; }).reverse();
-                var datosVentas = historialDias.map(function(d) { return parsearMontoCOP(d.venta); }).reverse();
+            var ctx = document.getElementById('graficaVentas');
+            if (!ctx) return;
+            
+            if (miGrafica) { miGrafica.destroy(); }
 
-                if (miGrafica) miGrafica.destroy();
+            var diasRecientes = historialDias.slice(0, 10).reverse();
+            var labels = diasRecientes.map(function(d) { return d.fecha; });
+            var dataVentas = diasRecientes.map(function(d) { return parsearMontoCOP(d.venta); });
+            var dataUtilidades = diasRecientes.map(function(d) { return parsearMontoCOP(d.utilidad); });
 
-                miGrafica = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels.length > 0 ? labels : ['Sin cierres'],
-                        datasets: [{
-                            label: 'Venta Total ($)',
-                            data: datosVentas,
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            miGrafica = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Ventas Totales ($)',
+                            data: dataVentas,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.2
-                        }]
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Utilidad Libre ($)',
+                            data: dataUtilidades,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { callback: function(val) { return '$' + formatCOP(val); } }
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: { 
-                            y: { 
-                                beginAtZero: true,
-                                ticks: {
-                                    callback: function(val) {
-                                        return '$' + formatCOP(val);
-                                    }
-                                }
-                            } 
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) { return context.dataset.label + ': $' + formatCOP(context.raw); }
+                            }
                         }
                     }
-                });
-            } catch(e) { console.warn("Grafica Error:", e); }
+                }
+            });
         }
 
-        function cargarMemoriaLocal() {
-            try {
-                var vLocal = localStorage.getItem('caja_ventas_v13');
-                if (vLocal) ventasRegistradas = JSON.parse(vLocal);
-                
-                var pLocal = localStorage.getItem('caja_pedidos_v13');
-                if (pLocal) pedidosRegistrados = JSON.parse(pLocal);
-                
-                var bLocal = localStorage.getItem('caja_base_v13');
-                if (bLocal) baseInicialCaja = JSON.parse(bLocal);
-                
-                var cLocal = localStorage.getItem('caja_catalogo_v13');
-                if (cLocal) catalogoProductos = JSON.parse(cLocal);
+        window.onload = function() {
+            cargarEstado();
+            
+            if (typeof firebase !== 'undefined') {
+                var firebaseConfig = {
+                    apiKey: "AIzaSyFakeKey_MOCK",
+                    authDomain: "caja-diaria.firebaseapp.com",
+                    projectId: "caja-diaria",
+                    storageBucket: "caja-diaria.appspot.com",
+                    messagingSenderId: "123456789",
+                    appId: "1:123456789:web:mockid"
+                };
 
-                var hLocal = localStorage.getItem('caja_historial_v13');
-                if (hLocal) historialDias = JSON.parse(hLocal);
-            } catch(e) { console.warn("Error leyendo localStorage:", e); }
-        }
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(firebaseConfig);
+                    }
+                    db = firebase.firestore();
+                    
+                    var badge = document.getElementById('cloudBadge');
+                    if (badge) {
+                        badge.innerHTML = '☁️ Nube Conectada';
+                        badge.style.background = '#dbeafe';
+                        badge.style.color = '#1e40af';
+                    }
 
-        var firebaseConfig = {
-            apiKey: "AIzaSyBgP5rBvykohBtmaGOKEVl7i-n0eCDdHlc",
-            authDomain: "caja-tienda.firebaseapp.com",
-            projectId: "caja-tienda",
-            storageBucket: "caja-tienda.firebasestorage.app",
-            messagingSenderId: "426400070575",
-            appId: "1:426400070575:web:6234f9deb28f2a806e4d5a"
-        };
+                    db.collection('historial').orderBy('timestamp', 'desc').onSnapshot(function(snapshot) {
+                        historialDias = [];
+                        snapshot.forEach(function(doc) {
+                            var data = doc.data();
+                            data.id = doc.id;
+                            historialDias.push(data);
+                        });
+                        
+                        reconstruirCatalogoDesdeHistorial();
+                        renderizarHistorial();
+                        actualizarGrafica();
+                    }, function(err) {
+                        console.error("Error al escuchar Firestore:", err);
+                    });
 
-        function inicializarApp() {
-            try {
-                var hoyStr = new Date().toISOString().split('T')[0];
-                var fPed = document.getElementById('fechaPedido');
-                var fRec = document.getElementById('fechaRecepcion');
-                if (fPed) fPed.value = hoyStr;
-                if (fRec) fRec.value = hoyStr;
-
-                cargarMemoriaLocal();
-                reconstruirCatalogoDesdeHistorial();
-
-                var baseInput = document.getElementById('baseInicial');
-                if (baseInput) baseInput.value = baseInicialCaja;
-
-                actualizarDatalist();
-                recalcularYPintar();
+                } catch (e) {
+                    console.error("Firebase falló. Usando modo local puro.", e);
+                }
+            } else {
                 renderizarHistorial();
                 actualizarGrafica();
-
-                ['nombre', 'costo', 'precio', 'cantidad', 'montoEfectivoMixto'].forEach(function(id) {
-                    var inp = document.getElementById(id);
-                    if (inp) {
-                        inp.addEventListener('keypress', function(e) {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                guardarOActualizarVenta();
-                            }
-                        });
-                    }
-                });
-
-                if (typeof firebase !== 'undefined') {
-                    try {
-                        if (!firebase.apps.length) {
-                            firebase.initializeApp(firebaseConfig);
-                        }
-                        db = firebase.firestore();
-
-                        // Sincronización en tiempo real de la caja del día
-                        db.collection('caja').doc('estado_actual').onSnapshot(function(doc) {
-                            if (doc && doc.exists) {
-                                var data = doc.data();
-                                if (data.catalogoProductos) {
-                                    catalogoProductos = Object.assign({}, catalogoProductos, data.catalogoProductos);
-                                }
-                                if (data.ventasRegistradas !== undefined) {
-                                    ventasRegistradas = data.ventasRegistradas;
-                                }
-                                if (data.pedidosRegistrados !== undefined) {
-                                    pedidosRegistrados = data.pedidosRegistrados;
-                                }
-                                if (data.baseInicialCaja !== undefined) {
-                                    baseInicialCaja = data.baseInicialCaja;
-                                    if (baseInput) baseInput.value = baseInicialCaja;
-                                }
-                                reconstruirCatalogoDesdeHistorial();
-                                recalcularYPintar();
-                                actualizarBadgeCloud(true);
-                            }
-                        }, function(err) {
-                            console.warn("Firebase snapshot estado error:", err);
-                            actualizarBadgeCloud(false);
-                        });
-
-                        // Sincronización en tiempo real del historial de cierres
-                        db.collection('historial').orderBy('timestamp', 'desc').onSnapshot(function(snapshot) {
-                            if (snapshot && !snapshot.empty) {
-                                historialDias = [];
-                                snapshot.forEach(function(doc) {
-                                    historialDias.push({ id: doc.id, ...doc.data() });
-                                });
-                                reconstruirCatalogoDesdeHistorial();
-                                renderizarHistorial();
-                                actualizarGrafica();
-                            }
-                        }, function(err) { console.warn("Firebase snapshot historial error:", err); });
-
-                    } catch(e) { console.warn("Error Firebase:", e); }
-                }
-            } catch(errInit) {
-                console.error("Error en inicializarApp:", errInit);
             }
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', inicializarApp);
-        } else {
-            inicializarApp();
-        }
+        };
     </script>
 </body>
 </html>
